@@ -98,21 +98,125 @@ const DEFAULT_STATE = {
   recents: [],
   favs: {},
   weights: {},
+  meta: { stamps: {} },
 };
+// Version autonome (page claude.ai) : la base CIQUAL est intégrée au fichier et les API externes sont bloquées.
+const EMBEDDED = !!document.getElementById('ciqual-data');
 let state = load();
 
+function normalize(s) {
+  if (!s) return structuredClone(DEFAULT_STATE);
+  return {
+    ...structuredClone(DEFAULT_STATE), ...s,
+    settings: { ...DEFAULT_STATE.settings, ...s.settings, profile: { ...DEFAULT_STATE.settings.profile, ...(s.settings || {}).profile } },
+    meta: { stamps: {}, ...s.meta },
+  };
+}
 function load() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return structuredClone(DEFAULT_STATE);
-    const s = JSON.parse(raw);
-    return { ...structuredClone(DEFAULT_STATE), ...s, settings: { ...DEFAULT_STATE.settings, ...s.settings, profile: { ...DEFAULT_STATE.settings.profile, ...(s.settings || {}).profile } } };
+    return normalize(JSON.parse(localStorage.getItem(KEY)));
   } catch {
     return structuredClone(DEFAULT_STATE);
   }
 }
+function saveLocal() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* stockage indisponible : la synchro prend le relais */ }
+}
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { toast('Impossible d’enregistrer (stockage plein ?)'); }
+  markChanges();
+  saveLocal();
+  schedulePush();
+}
+
+/* ---------- synchronisation avec le compte claude.ai (capacité db) ----------
+ * Le journal est découpé en un document « profile » (réglages, aliments perso,
+ * favoris, poids) et un document par mois. Chaque partie porte l'horodatage de
+ * sa dernière modification : la version la plus récente l'emporte. */
+const sync = { db: null, uid: null, last: {}, pending: 2, timer: null, pushing: false };
+let localJSON = parts();
+
+function parts(s = state) {
+  const out = { profile: JSON.stringify({ settings: s.settings, custom: s.custom, recents: s.recents, favs: s.favs, weights: s.weights }) };
+  for (const [d, list] of Object.entries(s.log)) {
+    if (!list.length) continue;
+    const k = 'm' + d.slice(0, 7);
+    (out[k] = out[k] || {})[d] = list;
+  }
+  for (const k of Object.keys(out)) if (k !== 'profile') out[k] = JSON.stringify(out[k]);
+  for (const k of Object.keys(s.meta.stamps)) if (!(k in out)) out[k] = '{}';
+  return out;
+}
+function markChanges() {
+  const now = parts();
+  for (const k of new Set([...Object.keys(now), ...Object.keys(localJSON)])) {
+    if (now[k] !== localJSON[k]) state.meta.stamps[k] = Date.now();
+  }
+  localJSON = parts();
+}
+function partRef(k) {
+  const profile = sync.db.doc(`data/users/${sync.uid}/profile`);
+  return k === 'profile' ? profile : profile.collection('months').doc(k.slice(1));
+}
+function applyRemote(k, snap) {
+  if (!snap.exists) return;
+  const doc = snap.data();
+  if (typeof doc.json !== 'string') return;
+  sync.last[k] = doc.json;
+  if (doc.updatedAt <= (state.meta.stamps[k] || 0) || doc.json === localJSON[k]) return;
+  const body = JSON.parse(doc.json);
+  if (k === 'profile') {
+    Object.assign(state, normalize({ ...state, ...body }));
+  } else {
+    const month = k.slice(1);
+    for (const d of Object.keys(state.log)) if (d.startsWith(month)) delete state.log[d];
+    Object.assign(state.log, body);
+  }
+  state.meta.stamps[k] = doc.updatedAt;
+  localJSON = parts();
+  saveLocal();
+  fillSettings();
+  renderJournal();
+  if ($('#view-history').classList.contains('active')) renderHistory();
+}
+function schedulePush() {
+  if (!sync.db || sync.pending) return;
+  clearTimeout(sync.timer);
+  sync.timer = setTimeout(push, 1200);
+}
+async function push() {
+  if (sync.pushing) return schedulePush();
+  sync.pushing = true;
+  try {
+    for (const [k, json] of Object.entries(localJSON)) {
+      if (json === sync.last[k] || !state.meta.stamps[k]) continue;
+      await partRef(k).set({ updatedAt: state.meta.stamps[k], json });
+      sync.last[k] = json;
+    }
+    setSyncStatus('Synchronisé avec ton compte claude.ai');
+  } catch (err) {
+    setSyncStatus(err.code === 'quota_exceeded' ? 'Espace de synchronisation plein : exporte puis efface les vieux mois.' : 'Synchronisation en attente (réessai automatique).');
+    if (err.code === 'unavailable') schedulePush();
+  } finally {
+    sync.pushing = false;
+  }
+}
+function setSyncStatus(t) {
+  const el = $('#sync-status');
+  if (el) { el.textContent = t; el.hidden = false; }
+}
+async function startSync() {
+  if (!window.claude || !window.claude.use) return;
+  const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+  const id = user && (await user.id());
+  if (!db || !id) return setSyncStatus('Connecte-toi à claude.ai pour synchroniser ton journal entre tes appareils.');
+  Object.assign(sync, { db, uid: id });
+  setSyncStatus('Synchronisation…');
+  const ready = () => { if (sync.pending && --sync.pending === 0) push(); };
+  partRef('profile').onSnapshot((snap) => { applyRemote('profile', snap); ready(); }, () => ready());
+  partRef('profile').collection('months').onSnapshot((qs) => {
+    qs.docs.forEach((d) => applyRemote('m' + d.id, d));
+    ready();
+  }, () => ready());
 }
 
 /* ---------- nutrition ---------- */
@@ -137,8 +241,7 @@ function macroGoals() {
 
 /* ---------- base CIQUAL ---------- */
 let ciqual = [];
-const ciqualReady = fetch('data/ciqual.json')
-  .then((r) => r.json())
+const ciqualReady = (EMBEDDED ? Promise.resolve(JSON.parse($('#ciqual-data').textContent)) : fetch('data/ciqual.json').then((r) => r.json()))
   .then((d) => {
     ciqual = d.foods.map((f) => ({ ...f, words: norm(f.n).split(' ').map(stem) }));
   })
@@ -769,11 +872,18 @@ pf.addEventListener('submit', (e) => {
 });
 $('#usda-key').addEventListener('change', (e) => { state.settings.usdaKey = e.target.value.trim(); save(); });
 
-$('#export-btn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+$('#export-btn').addEventListener('click', async () => {
+  const filename = `gabriel-tracker-${isoDate(new Date())}.json`;
+  const json = JSON.stringify(state, null, 2);
+  const downloads = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+  if (downloads) {
+    try { await downloads.save({ filename, data: json }); toast('Export enregistré'); } catch (err) { if (err.code !== 'declined') toast('Export impossible ici'); }
+    return;
+  }
+  const blob = new Blob([json], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `gabriel-tracker-${isoDate(new Date())}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -783,9 +893,9 @@ $('#import-file').addEventListener('change', async (e) => {
   try {
     const data = JSON.parse(await file.text());
     if (!data.log || !data.settings) throw new Error();
-    if (!confirm('Remplacer les données actuelles par celles du fichier ?')) return;
-    localStorage.setItem(KEY, JSON.stringify(data));
-    state = load();
+    if (!(await askConfirm('Remplacer les données actuelles par celles du fichier ?', 'Remplacer'))) return;
+    state = normalize({ ...data, meta: state.meta });
+    save();
     fillSettings();
     renderJournal();
     toast('Données importées');
@@ -794,10 +904,10 @@ $('#import-file').addEventListener('change', async (e) => {
   }
   e.target.value = '';
 });
-$('#reset-btn').addEventListener('click', () => {
-  if (!confirm('Effacer définitivement tout le journal, les aliments perso et les réglages ?')) return;
-  localStorage.removeItem(KEY);
-  state = load();
+$('#reset-btn').addEventListener('click', async () => {
+  if (!(await askConfirm('Effacer définitivement tout le journal, les aliments perso et les réglages ?', 'Tout effacer'))) return;
+  state = normalize({ meta: state.meta });
+  save();
   fillSettings();
   renderJournal();
   toast('Données effacées');
@@ -818,15 +928,34 @@ $('#prev-day').addEventListener('click', () => { currentDate = addDays(currentDa
 $('#next-day').addEventListener('click', () => { currentDate = addDays(currentDate, 1); renderJournal(); });
 $('#date-label').addEventListener('click', () => {
   const i = $('#date-input');
-  if (i.showPicker) i.showPicker(); else i.click();
+  try { i.showPicker(); } catch { i.classList.remove('visually-hidden'); i.focus(); }
 });
-$('#date-input').addEventListener('change', (e) => { if (e.target.value) { currentDate = e.target.value; renderJournal(); } });
+$('#date-input').addEventListener('change', (e) => {
+  e.target.classList.add('visually-hidden');
+  if (e.target.value) { currentDate = e.target.value; renderJournal(); }
+});
 $$('dialog [data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
 $$('dialog').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));
 
+function askConfirm(message, okLabel) {
+  const dlg = $('#confirm-dlg');
+  $('#confirm-msg').textContent = message;
+  $('#confirm-ok').textContent = okLabel;
+  dlg.showModal();
+  return new Promise((resolve) => {
+    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok'), { once: true });
+  });
+}
+
+if (EMBEDDED) {
+  $$('#source-tabs [data-src=off], #source-tabs [data-src=usda], #scan-btn, #usda-key-label').forEach((el) => (el.hidden = true));
+  $('#embedded-note').hidden = false;
+}
+
 fillSettings();
 renderJournal();
+startSync();
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+if (!EMBEDDED && 'serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

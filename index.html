@@ -107,16 +107,18 @@
         <h2>Sources de données</h2>
         <ul class="sources">
           <li><strong>CIQUAL / CALNUT 2020 (ANSES)</strong>. Table officielle française de composition des aliments : 2 119 aliments génériques, dont les féculents <em>cuits</em> (pâtes, riz, légumineuses…). Incluse dans l'app, elle marche hors ligne.</li>
+          <li id="embedded-note" hidden>Cette version hébergée sur claude.ai ne peut pas interroger d'autres sites : la recherche de produits du commerce (Open Food Facts), l'USDA et le scan de code-barres n'y sont pas disponibles. Crée les produits manquants dans « Mes aliments ».</li>
           <li><strong>Open Food Facts</strong> : plus de 3 millions de produits du commerce (marques, codes-barres). Recherche en ligne.</li>
           <li><strong>USDA FoodData Central</strong> (États-Unis) : aliments bruts et cuits (Foundation, SR Legacy), recherche en anglais.</li>
         </ul>
-        <label>Clé API USDA (facultative, gratuite sur <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">fdc.nal.usda.gov</a>)
+        <label id="usda-key-label">Clé API USDA (facultative, gratuite sur <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">fdc.nal.usda.gov</a>)
           <input type="text" id="usda-key" placeholder="DEMO_KEY (limité à ~30 requêtes / heure)">
         </label>
       </div>
       <div class="card">
         <h2>Mes données</h2>
         <p class="muted">Tout est enregistré sur cet appareil (stockage local du navigateur). Pense à exporter régulièrement.</p>
+        <p class="muted" id="sync-status" hidden></p>
         <div class="row wrap">
           <button class="btn" id="export-btn">Exporter (JSON)</button>
           <label class="btn">Importer<input type="file" id="import-file" accept="application/json" hidden></label>
@@ -216,6 +218,17 @@
         <button class="btn primary">OK</button>
       </form>
     </div>
+  </dialog>
+
+  <!-- CONFIRMATION -->
+  <dialog id="confirm-dlg" class="confirm">
+    <form method="dialog">
+      <p id="confirm-msg"></p>
+      <div class="row">
+        <button class="btn" value="cancel">Annuler</button>
+        <button class="btn danger" value="ok" id="confirm-ok">OK</button>
+      </div>
+    </form>
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>

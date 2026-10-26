@@ -41,7 +41,13 @@ python3 -m http.server 8000
 # puis ouvrir http://localhost:8000
 ```
 
+### Version hébergée sur claude.ai
+
+`python3 scripts/build_artifact.py dist/gabriel-tracker.html` produit une page autonome (base CIQUAL intégrée) publiée sur claude.ai. Dans cette version, le journal se synchronise avec le compte claude.ai (capacité `db`). En revanche, Open Food Facts, l'USDA et le scan de code-barres n'y marchent pas : la page ne peut pas appeler d'autres sites.
+
 ### La mettre en ligne gratuitement (GitHub Pages)
+
+GitHub Pages n'est disponible que pour un dépôt **public** sur un compte gratuit (*Settings → General → Danger Zone → Change visibility*).
 
 Dans le dépôt GitHub, va dans *Settings → Pages → Build and deployment*, choisis *Deploy from a branch*, puis la branche et le dossier `/ (root)`. L'app sera disponible sur `https://<utilisateur>.github.io/<dépôt>/`. Sur le téléphone, fais « Ajouter à l'écran d'accueil ».
 
