@@ -1,0 +1,12 @@
+{
+  "name": "Gabriel Tracker",
+  "short_name": "Calories",
+  "description": "Suivi des calories avec CIQUAL (ANSES), Open Food Facts et USDA",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f5",
+  "theme_color": "#16a34a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

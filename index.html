@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16a34a">
+  <title>Gabriel Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="prev-day" aria-label="Jour précédent">‹</button>
+    <button class="date-btn" id="date-label"></button>
+    <input type="date" id="date-input" class="visually-hidden" tabindex="-1">
+    <button class="icon-btn" id="next-day" aria-label="Jour suivant">›</button>
+  </header>
+
+  <main>
+    <!-- JOURNAL -->
+    <section id="view-journal" class="view active">
+      <div class="card summary">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 120 120" class="ring">
+            <circle cx="60" cy="60" r="52" class="ring-bg"/>
+            <circle cx="60" cy="60" r="52" class="ring-fg" id="ring-fg"/>
+          </svg>
+          <div class="ring-text">
+            <strong id="kcal-left">0</strong>
+            <span id="kcal-left-label">kcal restantes</span>
+          </div>
+        </div>
+        <div class="summary-side">
+          <div class="stat"><span>Objectif</span><strong id="kcal-goal">0</strong></div>
+          <div class="stat"><span>Consommé</span><strong id="kcal-eaten">0</strong></div>
+          <div class="macros" id="macro-bars"></div>
+        </div>
+      </div>
+      <div id="meals"></div>
+    </section>
+
+    <!-- HISTORIQUE -->
+    <section id="view-history" class="view">
+      <div class="card">
+        <div class="row between">
+          <h2>Historique</h2>
+          <div class="seg" id="hist-range">
+            <button data-days="7" class="on">7 j</button>
+            <button data-days="30">30 j</button>
+            <button data-days="90">90 j</button>
+          </div>
+        </div>
+        <div id="chart" class="chart"></div>
+        <div class="hist-stats" id="hist-stats"></div>
+      </div>
+      <div class="card">
+        <h2>Poids</h2>
+        <form class="row" id="weight-form">
+          <input type="number" step="0.1" min="20" max="400" id="weight-input" placeholder="Poids du jour (kg)" required>
+          <button class="btn primary">Enregistrer</button>
+        </form>
+        <div id="weight-chart" class="chart small"></div>
+      </div>
+    </section>
+
+    <!-- RÉGLAGES -->
+    <section id="view-settings" class="view">
+      <div class="card">
+        <h2>Objectif calorique</h2>
+        <form id="profile-form" class="grid2">
+          <label>Sexe
+            <select name="sex"><option value="m">Homme</option><option value="f">Femme</option></select>
+          </label>
+          <label>Âge <input type="number" name="age" min="10" max="110"></label>
+          <label>Taille (cm) <input type="number" name="height" min="100" max="250"></label>
+          <label>Poids (kg) <input type="number" step="0.1" name="weight" min="20" max="400"></label>
+          <label class="span2">Activité
+            <select name="activity">
+              <option value="1.2">Sédentaire (bureau, peu de sport)</option>
+              <option value="1.375">Légère (1–3 séances / semaine)</option>
+              <option value="1.55">Modérée (3–5 séances / semaine)</option>
+              <option value="1.725">Élevée (6–7 séances / semaine)</option>
+              <option value="1.9">Très élevée (travail physique + sport)</option>
+            </select>
+          </label>
+          <label class="span2">Objectif
+            <select name="target">
+              <option value="-500">Perte de poids (−0,5 kg / semaine)</option>
+              <option value="-250">Perte douce (−0,25 kg / semaine)</option>
+              <option value="0">Maintien</option>
+              <option value="250">Prise douce (+0,25 kg / semaine)</option>
+              <option value="500">Prise de masse (+0,5 kg / semaine)</option>
+            </select>
+          </label>
+          <p class="span2 muted" id="bmr-info"></p>
+          <button type="button" class="btn span2" id="apply-calc">Utiliser ce calcul (Mifflin-St Jeor)</button>
+          <label>Objectif (kcal / jour) <input type="number" name="goal" min="800" max="6000" required></label>
+          <label>Protéines (%) <input type="number" name="pPct" min="5" max="60"></label>
+          <label>Glucides (%) <input type="number" name="cPct" min="5" max="80"></label>
+          <label>Lipides (%) <input type="number" name="fPct" min="5" max="70"></label>
+          <button class="btn primary span2">Enregistrer</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Sources de données</h2>
+        <ul class="sources">
+          <li><strong>CIQUAL / CALNUT 2020 (ANSES)</strong>. Table officielle française de composition des aliments : 2 119 aliments génériques, dont les féculents <em>cuits</em> (pâtes, riz, légumineuses…). Incluse dans l'app, elle marche hors ligne.</li>
+          <li><strong>Open Food Facts</strong> : plus de 3 millions de produits du commerce (marques, codes-barres). Recherche en ligne.</li>
+          <li><strong>USDA FoodData Central</strong> (États-Unis) : aliments bruts et cuits (Foundation, SR Legacy), recherche en anglais.</li>
+        </ul>
+        <label>Clé API USDA (facultative, gratuite sur <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">fdc.nal.usda.gov</a>)
+          <input type="text" id="usda-key" placeholder="DEMO_KEY (limité à ~30 requêtes / heure)">
+        </label>
+      </div>
+      <div class="card">
+        <h2>Mes données</h2>
+        <p class="muted">Tout est enregistré sur cet appareil (stockage local du navigateur). Pense à exporter régulièrement.</p>
+        <div class="row wrap">
+          <button class="btn" id="export-btn">Exporter (JSON)</button>
+          <label class="btn">Importer<input type="file" id="import-file" accept="application/json" hidden></label>
+          <button class="btn danger" id="reset-btn">Tout effacer</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-view="journal" class="on"><span>📒</span>Journal</button>
+    <button id="fab" class="fab" aria-label="Ajouter un aliment">＋</button>
+    <button data-view="history"><span>📈</span>Historique</button>
+    <button data-view="settings"><span>⚙️</span>Réglages</button>
+  </nav>
+
+  <!-- RECHERCHE -->
+  <dialog id="search-dlg" class="sheet">
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="Fermer">✕</button>
+      <select id="meal-select"></select>
+    </div>
+    <div class="search-box">
+      <input type="search" id="search-input" placeholder="Rechercher : pâtes cuites, riz basmati, yaourt…" autocomplete="off">
+      <button class="icon-btn" id="scan-btn" title="Scanner un code-barres">▥</button>
+    </div>
+    <div class="seg tabs" id="source-tabs">
+      <button data-src="ciqual" class="on">CIQUAL</button>
+      <button data-src="off">Produits (OFF)</button>
+      <button data-src="usda">USDA</button>
+      <button data-src="mine">Mes aliments</button>
+    </div>
+    <div class="chips" id="quick-chips"></div>
+    <div id="results" class="results"></div>
+  </dialog>
+
+  <!-- PORTION -->
+  <dialog id="portion-dlg" class="sheet">
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="Fermer">✕</button>
+      <strong>Quantité</strong>
+      <button class="icon-btn" id="fav-btn" title="Favori">☆</button>
+    </div>
+    <div class="portion-body">
+      <h3 id="p-name"></h3>
+      <p class="muted" id="p-source"></p>
+      <div id="raw-box" class="raw-box" hidden>
+        <div class="seg" id="raw-toggle">
+          <button data-mode="cooked" class="on">Pesé cuit</button>
+          <button data-mode="raw">Pesé cru / sec</button>
+        </div>
+        <p class="muted small" id="raw-info"></p>
+      </div>
+      <div class="qty-row">
+        <input type="number" id="p-grams" min="0" step="1" inputmode="decimal">
+        <span id="p-unit">g</span>
+      </div>
+      <div class="chips" id="p-presets"></div>
+      <div class="nutri" id="p-nutri"></div>
+      <button class="btn primary block" id="p-add">Ajouter</button>
+      <button class="btn danger block" id="p-delete" hidden>Supprimer du journal</button>
+    </div>
+  </dialog>
+
+  <!-- ALIMENT PERSO -->
+  <dialog id="custom-dlg" class="sheet">
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="Fermer">✕</button>
+      <strong>Nouvel aliment (pour 100 g)</strong>
+      <span></span>
+    </div>
+    <form id="custom-form" class="grid2 portion-body">
+      <label class="span2">Nom <input name="n" required></label>
+      <label>Calories (kcal) <input type="number" step="any" name="kcal" required></label>
+      <label>Protéines (g) <input type="number" step="any" name="p"></label>
+      <label>Glucides (g) <input type="number" step="any" name="c"></label>
+      <label>dont sucres (g) <input type="number" step="any" name="s"></label>
+      <label>Lipides (g) <input type="number" step="any" name="f"></label>
+      <label>Fibres (g) <input type="number" step="any" name="fi"></label>
+      <label class="span2">Portion habituelle (g, facultatif) <input type="number" step="any" name="serving"></label>
+      <button class="btn primary span2">Enregistrer l'aliment</button>
+    </form>
+  </dialog>
+
+  <!-- SCAN -->
+  <dialog id="scan-dlg" class="sheet">
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="Fermer">✕</button>
+      <strong>Code-barres</strong>
+      <span></span>
+    </div>
+    <div class="portion-body">
+      <video id="scan-video" playsinline muted hidden></video>
+      <p class="muted" id="scan-msg"></p>
+      <form class="row" id="barcode-form">
+        <input type="text" inputmode="numeric" pattern="[0-9]{6,14}" id="barcode-input" placeholder="Saisir le code (ex : 3017620422003)" required>
+        <button class="btn primary">OK</button>
+      </form>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
